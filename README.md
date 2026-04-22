@@ -116,10 +116,29 @@ docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
 
 ## Smoke checks
 
+No-hardware OpenPI contract check:
+
+```bash
+docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
+  /workspace/runtime_scripts/smoke_openpi_mock_rollout.sh
+```
+
+This uses synthetic cameras, a synthetic robot state, and a mock policy that returns an action chunk shaped
+like the OpenPI DROID policy. It exercises observation extraction, request construction, image resizing,
+action validation, gripper binarization, clipping, and dry-run logging without requiring robot motion,
+real cameras, or a running policy server.
+
 Camera-only:
 
 ```bash
 docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
+  micromamba run -n droid python /workspace/runtime_scripts/smoke_cameras.py
+```
+
+Camera wrapper without hardware:
+
+```bash
+docker compose -f docker-compose.singlepc.yml run --rm -e DROID_CAMERA_BACKEND=mock openpi-droid \
   micromamba run -n droid python /workspace/runtime_scripts/smoke_cameras.py
 ```
 
@@ -140,6 +159,8 @@ docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
 ## Notes
 
 - `scripts/openpi_droid_main.py` defaults to dry-run and refuses motion unless both motion guards are set.
+- `scripts/openpi_droid_main.py --mock_robot_state --mock_cameras --mock_policy` provides a full
+  no-hardware contract check for development machines.
 - The policy input uses one external Arducam plus the D435 color stream.
 - The D435 reader uses `pyrealsense2`; if the device is not visible, check host USB permissions, `/run/udev`, and `DROID_D435_SERIAL`.
 - The Franka Hand launch command is configurable through `DROID_GRIPPER_LAUNCH_CMD`.
