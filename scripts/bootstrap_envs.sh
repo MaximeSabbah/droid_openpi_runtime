@@ -7,6 +7,12 @@ echo "[bootstrap] Installing DROID runtime environment"
 micromamba activate droid
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install -e /workspace/droid
+python -m pip install dm-robotics-moma==0.5.0 --no-deps
+python -m pip install dm-robotics-transformations==0.5.0 --no-deps
+python -m pip install dm-robotics-agentflow==0.5.0 --no-deps
+python -m pip install dm-robotics-geometry==0.5.0 --no-deps
+python -m pip install dm-robotics-manipulation==0.5.0 --no-deps
+python -m pip install dm-robotics-controllers==0.5.0 --no-deps
 python -m pip install -e /workspace/openpi/packages/openpi-client
 python -m pip install pyrealsense2 tyro
 micromamba deactivate

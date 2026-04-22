@@ -24,7 +24,9 @@ if [[ -z "${runtime_env}" ]]; then
     fi
 fi
 
+set +u
 micromamba activate "${runtime_env}"
+set -u
 
 exec python /workspace/droid/scripts/openpi_droid_main.py \
     --dry-run \

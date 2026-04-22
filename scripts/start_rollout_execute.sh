@@ -7,7 +7,9 @@ if [[ "${DROID_ENABLE_ROBOT_MOTION:-0}" != "1" || "${CONFIRM_REAL_ROBOT:-0}" != 
 fi
 
 eval "$(micromamba shell hook --shell bash)"
+set +u
 micromamba activate "${DROID_ROBOT_RUNTIME_ENV:-polymetis-local}"
+set -u
 
 exec python /workspace/droid/scripts/openpi_droid_main.py \
     --execute \

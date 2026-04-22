@@ -8,6 +8,9 @@ FAIRO_GIT_URL="${DROID_FAIRO_GIT_URL:-https://github.com/facebookresearch/fairo.
 POLYMETIS_DIR="${DROID_POLYMETIS_DIR:-${FAIRO_DIR}/polymetis}"
 ROBOT_TYPE="${DROID_ROBOT_TYPE:-panda}"
 POLYMETIS_ENV="${DROID_ROBOT_RUNTIME_ENV:-${DROID_POLYMETIS_CONDA_ENV:-polymetis-local}}"
+POLYMETIS_CONFIG_OVERLAY="${DROID_POLYMETIS_CONFIG_DIR:-/workspace/runtime_config/polymetis}"
+ROBOT_CLIENT_CONFIG="${DROID_ROBOT_CLIENT_CONFIG:-droid_franka_hardware}"
+ROBOT_MODEL_CONFIG="${DROID_ROBOT_MODEL_CONFIG:-droid_franka_panda}"
 BUILD_TESTS="${DROID_POLYMETIS_BUILD_TESTS:-OFF}"
 BUILD_DOCS="${DROID_POLYMETIS_BUILD_DOCS:-OFF}"
 BUILD_JOBS="${DROID_FRANKA_BUILD_JOBS:-$(nproc)}"
@@ -63,8 +66,17 @@ if [[ ! -d "${POLYMETIS_DIR}/polymetis" ]]; then
     exit 2
 fi
 
-echo "[franka] Updating nested FAIRO/Polymetis submodules"
-git -C "${FAIRO_DIR}" submodule update --init --recursive
+git config --global --add safe.directory "${DROID_ROOT}" || true
+git config --global --add safe.directory "${FAIRO_DIR}" || true
+git config --global --add safe.directory '*' || true
+
+echo "[franka] Updating required FAIRO/Polymetis submodules"
+git -C "${FAIRO_DIR}" submodule update --init --recursive \
+    polymetis/polymetis/src/clients/franka_panda_client/third_party/libfranka
+if [[ "${BUILD_TESTS}" == "ON" ]]; then
+    git -C "${FAIRO_DIR}" submodule update --init --recursive \
+        polymetis/polymetis/tests/cpp/fake_clock
+fi
 
 eval "$(micromamba shell hook --shell bash)"
 
@@ -72,14 +84,35 @@ if micromamba env list | awk '{print $1}' | grep -Fxq "${POLYMETIS_ENV}"; then
     echo "[franka] Reusing micromamba env ${POLYMETIS_ENV}"
 else
     echo "[franka] Creating micromamba env ${POLYMETIS_ENV} from FAIRO Polymetis environment.yml"
-    micromamba env create -y -n "${POLYMETIS_ENV}" -f "${POLYMETIS_DIR}/polymetis/environment.yml"
+    POLYMETIS_ENV_FILE="${POLYMETIS_DIR}/polymetis/environment.yml"
+    if [[ "${DROID_USE_CONDA_DEFAULTS:-0}" == "1" ]]; then
+        micromamba env create -y -n "${POLYMETIS_ENV}" -f "${POLYMETIS_ENV_FILE}"
+    else
+        FILTERED_ENV_FILE="/tmp/polymetis-environment-no-defaults.yml"
+        awk '$0 !~ /^[[:space:]]*-[[:space:]]*defaults[[:space:]]*$/' "${POLYMETIS_ENV_FILE}" > "${FILTERED_ENV_FILE}"
+        micromamba env create -y -n "${POLYMETIS_ENV}" \
+            --override-channels \
+            -c pytorch \
+            -c fair-robotics \
+            -c aihabitat \
+            -c conda-forge \
+            -f "${FILTERED_ENV_FILE}"
+    fi
 fi
 
+set +u
 micromamba activate "${POLYMETIS_ENV}"
+set -u
 
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install -e "${POLYMETIS_DIR}/polymetis"
 python -m pip install -e "${DROID_ROOT}"
+python -m pip install dm-robotics-moma==0.5.0 --no-deps
+python -m pip install dm-robotics-transformations==0.5.0 --no-deps
+python -m pip install dm-robotics-agentflow==0.5.0 --no-deps
+python -m pip install dm-robotics-geometry==0.5.0 --no-deps
+python -m pip install dm-robotics-manipulation==0.5.0 --no-deps
+python -m pip install dm-robotics-controllers==0.5.0 --no-deps
 python -m pip install -e "${OPENPI_ROOT}/packages/openpi-client"
 python -m pip install pyrealsense2 tyro
 
@@ -102,19 +135,21 @@ cmake .. \
 cmake --build . --parallel "${BUILD_JOBS}"
 
 CONFIG_SRC="${DROID_ROOT}/config/${ROBOT_TYPE}"
-CONFIG_DST="${POLYMETIS_DIR}/polymetis/conf"
 if [[ ! -f "${CONFIG_SRC}/franka_hardware.yaml" || ! -f "${CONFIG_SRC}/franka_panda.yaml" ]]; then
     echo "Missing DROID Franka config files in ${CONFIG_SRC}." >&2
     exit 2
 fi
 
-echo "[franka] Installing DROID Franka configs into Polymetis config tree"
-mkdir -p "${CONFIG_DST}/robot_client" "${CONFIG_DST}/robot_model"
-cp "${CONFIG_SRC}/franka_hardware.yaml" "${CONFIG_DST}/robot_client/franka_hardware.yaml"
-cp "${CONFIG_SRC}/franka_panda.yaml" "${CONFIG_DST}/robot_model/franka_panda.yaml"
+echo "[franka] Installing DROID Franka configs into runtime Polymetis overlay: ${POLYMETIS_CONFIG_OVERLAY}"
+mkdir -p "${POLYMETIS_CONFIG_OVERLAY}/robot_client" "${POLYMETIS_CONFIG_OVERLAY}/robot_model"
+{
+    echo "# @package _global_"
+    cat "${CONFIG_SRC}/franka_hardware.yaml"
+} > "${POLYMETIS_CONFIG_OVERLAY}/robot_client/${ROBOT_CLIENT_CONFIG}.yaml"
+cp "${CONFIG_SRC}/franka_panda.yaml" "${POLYMETIS_CONFIG_OVERLAY}/robot_model/${ROBOT_MODEL_CONFIG}.yaml"
 
 if [[ -n "${DROID_ROBOT_IP:-}" && "${DROID_ROBOT_IP}" != SET_* ]]; then
-    python - "${CONFIG_DST}/robot_client/franka_hardware.yaml" "${DROID_ROBOT_IP}" <<'PY'
+    python - "${POLYMETIS_CONFIG_OVERLAY}/robot_client/${ROBOT_CLIENT_CONFIG}.yaml" "${DROID_ROBOT_IP}" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -130,6 +165,13 @@ PY
 else
     echo "[franka] DROID_ROBOT_IP is unset or still a placeholder; leaving robot_ip from ${CONFIG_SRC}/franka_hardware.yaml"
 fi
+
+cat <<EOF
+[franka] DROID Polymetis launch config:
+  robot_client=${ROBOT_CLIENT_CONFIG}
+  robot_model=${ROBOT_MODEL_CONFIG}
+  --config-dir ${POLYMETIS_CONFIG_OVERLAY}
+EOF
 
 echo "[franka] Running low-level availability check"
 /workspace/runtime_scripts/test_polymetis.sh

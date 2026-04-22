@@ -21,29 +21,33 @@ The container is intentionally permissive for hardware bring-up:
 ```bash
 cd /home/msabbah/Desktop/droid_openpi_runtime
 cp .env.example .env
-docker compose -f docker-compose.singlepc.yml build
-docker compose -f docker-compose.singlepc.yml run --rm openpi-droid /workspace/runtime_scripts/bootstrap_envs.sh
+./install_all.sh
 ```
 
-The bootstrap installs into named Docker volumes for `/opt/micromamba/envs`, `/opt/micromamba/pkgs`, and `/root/.cache`,
-so the installed Python environments persist across `docker compose run --rm` calls.
+The installer builds the image, installs the DROID/OpenPI envs, installs the FAIRO/Polymetis/libfranka
+robot-control env, installs DROID's Franka configs into `/workspace/runtime_config/polymetis`, and runs
+the low-level availability check.
 
-For real Franka control, DROID also needs the FAIRO/Polymetis low-level stack and libfranka in the
-robot-control env. Initialize the FAIRO source first:
+The Python environments install into named Docker volumes for `/opt/micromamba/envs`, `/opt/micromamba/pkgs`,
+and `/root/.cache`, so they persist across `docker compose run --rm` calls.
+
+FAIRO is a git submodule at `/home/msabbah/Desktop/droid/droid/fairo`. If you ever need to repair or
+refresh it manually:
 
 ```bash
 git -C /home/msabbah/Desktop/droid submodule update --init --recursive droid/fairo
 ```
 
-In this checkout, `.gitmodules` may exist without a registered `droid/fairo` gitlink. If the command above
-fails with `pathspec did not match`, clone FAIRO directly:
+If an older checkout has `.gitmodules` metadata without a registered `droid/fairo` gitlink and the command
+above fails with `pathspec did not match`, repair the gitlink:
 
 ```bash
-git clone --recursive https://github.com/facebookresearch/fairo.git \
-  /home/msabbah/Desktop/droid/droid/fairo
+git -C /home/msabbah/Desktop/droid submodule add --force \
+  https://github.com/facebookresearch/fairo.git droid/fairo
+git -C /home/msabbah/Desktop/droid submodule update --init droid/fairo
 ```
 
-Then build the Franka stack inside the container:
+Then rebuild the Franka stack inside the container:
 
 ```bash
 docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
@@ -139,6 +143,9 @@ docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
 - The policy input uses one external Arducam plus the D435 color stream.
 - The D435 reader uses `pyrealsense2`; if the device is not visible, check host USB permissions, `/run/udev`, and `DROID_D435_SERIAL`.
 - The Franka Hand launch command is configurable through `DROID_GRIPPER_LAUNCH_CMD`.
+- The robot launch wrapper uses `DROID_POLYMETIS_CONFIG_DIR` plus `DROID_ROBOT_CLIENT_CONFIG` and
+  `DROID_ROBOT_MODEL_CONFIG` to pass Polymetis `--config-dir`, so DROID-specific Franka configs live in
+  the runtime overlay instead of overwriting upstream FAIRO files.
 - The upstream repo/submodule is `fairo`, but this DROID code still imports the low-level robot runtime as `polymetis` and expects `launch_robot.py` / `launch_gripper.py`.
 - Real robot rollout runs in `DROID_ROBOT_RUNTIME_ENV`, defaulting to `polymetis-local`, while the OpenPI policy server runs in the separate `openpi` env.
 - The compose service is privileged, uses host networking, mounts `/dev`, `/dev/bus/usb`, and `/run/udev`, and adds `SYS_NICE` plus RT ulimits for the Franka control process.

@@ -25,6 +25,7 @@ services:
       DROID_LAUNCH_WITH_SUDO: "0"
       DROID_ROBOT_RUNTIME_ENV: polymetis-local
       DROID_POLYMETIS_CONDA_ENV: polymetis-local
+      DROID_POLYMETIS_CONFIG_DIR: /workspace/runtime_config/polymetis
       DROID_ENV_ACTIVATE: eval "$(micromamba shell hook --shell bash)" && micromamba activate polymetis-local
       OPENPI_HOST: 127.0.0.1
       OPENPI_PORT: "8000"
