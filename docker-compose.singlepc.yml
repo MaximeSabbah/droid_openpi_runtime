@@ -1,0 +1,53 @@
+services:
+  openpi-droid:
+    build:
+      context: .
+      dockerfile: Dockerfile.openpi_droid
+    image: openpi-droid-singlepc:latest
+    container_name: openpi-droid-singlepc
+    network_mode: host
+    ipc: host
+    privileged: true
+    cap_add:
+      - SYS_NICE
+    ulimits:
+      rtprio: 99
+      memlock: 102400
+    gpus: all
+    working_dir: /workspace
+    env_file:
+      - .env
+      - config/robot.env
+      - config/cameras.env
+      - config/openpi.env
+    environment:
+      DROID_CAMERA_BACKEND: openpi
+      DROID_LAUNCH_WITH_SUDO: "0"
+      DROID_ROBOT_RUNTIME_ENV: polymetis-local
+      DROID_POLYMETIS_CONDA_ENV: polymetis-local
+      DROID_ENV_ACTIVATE: eval "$(micromamba shell hook --shell bash)" && micromamba activate polymetis-local
+      OPENPI_HOST: 127.0.0.1
+      OPENPI_PORT: "8000"
+      PYTHONPATH: /workspace/droid:/workspace/openpi/packages/openpi-client/src
+    volumes:
+      - ../droid:/workspace/droid
+      - ../openpi:/workspace/openpi
+      - ./config:/workspace/runtime_config
+      - ./scripts:/workspace/runtime_scripts:ro
+      - /dev:/dev
+      - /dev/bus/usb:/dev/bus/usb
+      - /run/udev:/run/udev:ro
+      - micromamba-envs:/opt/micromamba/envs
+      - micromamba-pkgs:/opt/micromamba/pkgs
+      - runtime-cache:/root/.cache
+    device_cgroup_rules:
+      - "c 81:* rmw"   # V4L2 cameras: /dev/video*
+      - "c 188:* rmw"  # USB serial: /dev/ttyUSB*
+      - "c 189:* rmw"  # USB bus devices: /dev/bus/usb/*
+    stdin_open: true
+    tty: true
+
+volumes:
+  micromamba-envs:
+  micromamba-pkgs:
+  runtime-cache:

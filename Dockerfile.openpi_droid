@@ -1,0 +1,58 @@
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
+
+SHELL ["/bin/bash", "-lc"]
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    MAMBA_ROOT_PREFIX=/opt/micromamba \
+    PATH=/opt/micromamba/bin:$PATH \
+    UV_LINK_MODE=copy
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash-completion \
+    build-essential \
+    ca-certificates \
+    cmake \
+    curl \
+    ffmpeg \
+    gpg \
+    git \
+    iproute2 \
+    iputils-ping \
+    libeigen3-dev \
+    libgl1 \
+    libglib2.0-0 \
+    libpoco-dev \
+    libspdlog-dev \
+    libssl-dev \
+    libusb-1.0-0 \
+    libusb-1.0-0-dev \
+    net-tools \
+    ninja-build \
+    pciutils \
+    pkg-config \
+    software-properties-common \
+    sudo \
+    tmux \
+    udev \
+    usbutils \
+    v4l-utils \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest \
+    | tar -xvj -C /usr/local/bin --strip-components=1 bin/micromamba \
+    && micromamba shell init --shell bash --root-prefix "$MAMBA_ROOT_PREFIX" \
+    && micromamba create -y -n droid python=3.10 pip \
+    && micromamba create -y -n openpi python=3.11 pip \
+    && micromamba clean -a -y
+
+RUN micromamba run -n droid python -m pip install --upgrade pip setuptools wheel uv \
+    && micromamba run -n openpi python -m pip install --upgrade pip setuptools wheel uv
+
+WORKDIR /workspace
+
+COPY scripts/entrypoint.sh /usr/local/bin/openpi-droid-entrypoint
+RUN chmod +x /usr/local/bin/openpi-droid-entrypoint
+
+ENTRYPOINT ["/usr/local/bin/openpi-droid-entrypoint"]
+CMD ["bash"]
