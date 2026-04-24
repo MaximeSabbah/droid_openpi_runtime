@@ -1,5 +1,6 @@
 .env
 config/polymetis/
+reports/
 __pycache__/
 *.py[cod]
 .venv/

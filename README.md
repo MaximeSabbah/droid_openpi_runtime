@@ -142,6 +142,17 @@ docker compose -f docker-compose.singlepc.yml run --rm -e DROID_CAMERA_BACKEND=m
   micromamba run -n droid python /workspace/runtime_scripts/smoke_cameras.py
 ```
 
+Visual pipeline report:
+
+```bash
+docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
+  micromamba run -n droid python /workspace/runtime_scripts/visual_pipeline_report.py \
+  --mock_policy --steps 1 --output_dir /workspace/reports/visual_real_cameras_mock_policy
+```
+
+Open `reports/visual_real_cameras_mock_policy/report.html` on the host to inspect camera panels,
+policy-sized images, action plots, and the action CSV.
+
 No-motion VLA action path through DROID FrankaRobot:
 
 ```bash
@@ -170,6 +181,29 @@ FAIRO/Polymetis low-level availability:
 docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
   /workspace/runtime_scripts/test_polymetis.sh
 ```
+
+## Polymetis simulation
+
+The FAIRO checkout includes an experimental headless Bullet sim that exposes Polymetis arm and gripper
+servers on localhost ports `50051` and `50052`. It is useful for validating that DROID can execute VLA
+actions through the Polymetis interfaces without contacting the real robot.
+
+Open one terminal for the sim:
+
+```bash
+docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
+  /workspace/runtime_scripts/start_polymetis_bullet_sim.sh
+```
+
+Open another terminal for the simulated rollout execution:
+
+```bash
+docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
+  /workspace/runtime_scripts/start_rollout_sim_execute.sh \
+  --mock_policy --prompt "simulation smoke test" --max_timesteps 20
+```
+
+For real OpenPI outputs, start the policy server first and omit `--mock_policy` from the simulated rollout.
 
 ## Notes
 

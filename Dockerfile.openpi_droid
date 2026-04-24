@@ -20,6 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     iputils-ping \
     libeigen3-dev \
     libgl1 \
+    libopengl0 \
     libglib2.0-0 \
     libpoco-dev \
     libspdlog-dev \

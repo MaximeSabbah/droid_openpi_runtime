@@ -34,6 +34,7 @@ services:
       - ../droid:/workspace/droid
       - ../openpi:/workspace/openpi
       - ./config:/workspace/runtime_config
+      - ./reports:/workspace/reports
       - ./scripts:/workspace/runtime_scripts:ro
       - /dev:/dev
       - /dev/bus/usb:/dev/bus/usb
