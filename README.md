@@ -72,33 +72,112 @@ lsusb
 rs-enumerate-devices
 ```
 
-## Start server and rollout
+## Runbook: preview before live robot
 
-Open one terminal for the policy server:
+Use this order before every real robot run. Replace the prompt as needed.
+
+### 1. Start OpenPI policy server
+
+Skip this if a policy server is already running on `127.0.0.1:8000`.
 
 ```bash
 docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
   /workspace/runtime_scripts/start_policy_server.sh
 ```
 
-Open another terminal for camera + policy dry-run:
+### 2. Generate a no-motion visual report
+
+This captures real camera images, reads robot state in read-only mode, sends one or more OpenPI requests,
+and writes policy images plus action plots. It does not execute robot motion.
+
+```bash
+docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
+  micromamba run -n polymetis-local python /workspace/runtime_scripts/visual_pipeline_report.py \
+    --real_robot_state \
+    --no_reset \
+    --prompt "grab the red cube on the table" \
+    --steps 8 \
+    --open_loop_horizon 8 \
+    --output_dir /workspace/reports/grab_red_cube_visual_real_state
+```
+
+Open `reports/grab_red_cube_visual_real_state/report.html`.
+
+### 3. Preview VLA motion in PyBullet
+
+This sends real-camera OpenPI outputs to the localhost Bullet sim, not to the real robot. The sim is a
+rough rejection test for obviously bad actions, not a faithful task simulator: it does not model the real
+table, cube, camera geometry, or grasp contact. For the closest preview, copy the real robot's current
+joint pose into the sim start pose. The first policy chunk is the best-aligned one; later chunks can drift
+because the simulated robot moves while the real cameras still see the stationary real setup.
+
+Capture the real robot state in read-only mode:
+
+```bash
+docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
+  /workspace/runtime_scripts/capture_real_robot_state.sh \
+    --output_dir /workspace/reports/real_robot_state
+
+source reports/real_robot_state/real_robot_state.env
+```
+
+Allow the container to open an X11 window:
+
+```bash
+xhost +SI:localuser:root
+```
+
+Terminal 1, start the GUI sim:
+
+```bash
+docker compose -f docker-compose.singlepc.yml run --rm \
+  -e DISPLAY="$DISPLAY" \
+  -e QT_X11_NO_MITSHM=1 \
+  -e POLYMETIS_SIM_GUI=true \
+  -e POLYMETIS_SIM_REST_POSE="$POLYMETIS_SIM_REST_POSE" \
+  -v /tmp/.X11-unix:/tmp/.X11-unix \
+  openpi-droid \
+  /workspace/runtime_scripts/start_polymetis_bullet_sim.sh
+```
+
+Terminal 2, run the VLA-to-sim preview:
+
+```bash
+docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
+  /workspace/runtime_scripts/start_rollout_sim_preview.sh \
+    --prompt "grab the red cube on the table" \
+    --max_timesteps 120 \
+    --open_loop_horizon 8
+```
+
+Inspect `reports/sim_preview_debug/rollout.csv`, `policy_inputs/`, and `action_chunks/`. If actions
+saturate, flip signs repeatedly, or the motion looks unstable, do not go live yet.
+The preview warms up camera observations before the first policy call to avoid dark first-frame
+auto-exposure artifacts.
+
+Stop the rollout terminal first, then the sim terminal. The sim owns localhost ports `50051` and `50052`.
+Optionally revoke X11 permission:
+
+```bash
+xhost -SI:localuser:root
+```
+
+### 4. Run a read-only dry run
+
+This streams real cameras and OpenPI outputs while keeping robot motion disabled. The wrapper forces
+read-only arm state and skips the gripper launcher.
 
 ```bash
 docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
   /workspace/runtime_scripts/start_rollout_dry_run.sh \
-  --prompt "pick up the object" \
-  --mock_robot_state
+    --prompt "grab the red cube on the table" \
+    --max_timesteps 30
 ```
 
-Then dry-run with real robot state but no motion, after `bootstrap_fairo_franka.sh` passes:
+### 5. Execute on the real robot
 
-```bash
-docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
-  /workspace/runtime_scripts/start_rollout_dry_run.sh \
-  --prompt "pick up the object"
-```
-
-Only after dry-run succeeds, enable real motion in `.env`:
+Only after the visual report, sim preview, and read-only dry run look acceptable, enable real motion in
+`.env`:
 
 ```env
 DROID_ENABLE_ROBOT_MOTION=1
@@ -110,8 +189,8 @@ Then run:
 ```bash
 docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
   /workspace/runtime_scripts/start_rollout_execute.sh \
-  --prompt "pick up the object" \
-  --max_timesteps 600
+    --prompt "grab the red cube on the table" \
+    --max_timesteps 600
 ```
 
 ## Smoke checks
@@ -193,28 +272,25 @@ docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
   /workspace/runtime_scripts/test_polymetis.sh
 ```
 
-## Polymetis simulation
+## Optional headless sim smoke
 
-The FAIRO checkout includes an experimental headless Bullet sim that exposes Polymetis arm and gripper
-servers on localhost ports `50051` and `50052`. It is useful for validating that DROID can execute VLA
-actions through the Polymetis interfaces without contacting the real robot.
+This verifies the Polymetis sim execution path with mock cameras and a mock policy. Use the GUI preview
+in the runbook above for real OpenPI motion assessment.
 
-Open one terminal for the sim:
+Terminal 1:
 
 ```bash
 docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
   /workspace/runtime_scripts/start_polymetis_bullet_sim.sh
 ```
 
-Open another terminal for the simulated rollout execution:
+Terminal 2:
 
 ```bash
 docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
   /workspace/runtime_scripts/start_rollout_sim_execute.sh \
   --mock_policy --prompt "simulation smoke test" --max_timesteps 20
 ```
-
-For real OpenPI outputs, start the policy server first and omit `--mock_policy` from the simulated rollout.
 
 ## Notes
 

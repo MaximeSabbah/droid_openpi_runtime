@@ -64,7 +64,14 @@ def parse_args():
     parser.add_argument("--no_launch_robot", action="store_true")
     parser.add_argument("--no_reset", action="store_true", default=True)
     parser.add_argument("--save_preview", default="")
-    return parser.parse_args()
+    parser.add_argument(
+        "--warmup_observations",
+        type=int,
+        default=int(os.environ.get("DROID_OBSERVATION_WARMUP_STEPS", "30")),
+    )
+    args = parser.parse_args()
+    args.dry_run = True
+    return args
 
 
 def main():
@@ -75,8 +82,10 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    configure_no_motion_robot_state(args)
     policy_client = make_policy_client(args)
     observation_source = make_observation_source(args)
+    warmup_observation_source(observation_source, args.warmup_observations)
     action_rows = []
     report_rows = []
     pred_action_chunk = None
@@ -134,6 +143,19 @@ def main():
         observation_source.close()
 
     print("visual_report_ok {0}".format(output_dir / "report.html"))
+
+
+def configure_no_motion_robot_state(args):
+    if args.mock_robot_state:
+        return
+    os.environ.setdefault("DROID_ROBOT_READONLY", "1")
+    os.environ.setdefault("DROID_SKIP_GRIPPER_LAUNCH", "1")
+    os.environ.setdefault("DROID_MOCK_GRIPPER_POSITION", "0.0")
+
+
+def warmup_observation_source(observation_source, warmup_steps):
+    for _ in range(max(0, warmup_steps)):
+        observation_source.get_observation()
 
 
 def save_policy_images(output_dir, step_idx, request_data):

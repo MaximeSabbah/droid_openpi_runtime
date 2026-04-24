@@ -2,6 +2,7 @@
 set -euo pipefail
 
 eval "$(micromamba shell hook --shell bash)"
+export DROID_OBSERVATION_WARMUP_STEPS="${DROID_OBSERVATION_WARMUP_STEPS:-30}"
 
 runtime_env="${DROID_DRY_RUN_RUNTIME_ENV:-}"
 if [[ -z "${runtime_env}" ]]; then
@@ -21,6 +22,9 @@ if [[ -z "${runtime_env}" ]]; then
         runtime_env="droid"
     else
         runtime_env="${DROID_ROBOT_RUNTIME_ENV:-polymetis-local}"
+        export DROID_ROBOT_READONLY="${DROID_ROBOT_READONLY:-1}"
+        export DROID_SKIP_GRIPPER_LAUNCH="${DROID_SKIP_GRIPPER_LAUNCH:-1}"
+        export DROID_MOCK_GRIPPER_POSITION="${DROID_MOCK_GRIPPER_POSITION:-0.0}"
     fi
 fi
 

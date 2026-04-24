@@ -10,6 +10,7 @@ ARM_PORT="${POLYMETIS_SIM_ARM_PORT:-50051}"
 GRIPPER_PORT="${POLYMETIS_SIM_GRIPPER_PORT:-50052}"
 ARM_IP="${POLYMETIS_SIM_ARM_IP:-localhost}"
 GRIPPER_IP="${POLYMETIS_SIM_GRIPPER_IP:-localhost}"
+REST_POSE="${POLYMETIS_SIM_REST_POSE:-}"
 
 children=()
 cleanup() {
@@ -56,9 +57,16 @@ wait_for_port "127.0.0.1" "$GRIPPER_PORT"
 
 cd /workspace/droid/droid/fairo/polymetis/polymetis/python/polysim/envs/experimental
 
-exec python bullet_manipulator.py \
+sim_args=(
     "gui=${POLYMETIS_SIM_GUI:-false}" \
     "arm.ip=${ARM_IP}" \
     "arm.port=${ARM_PORT}" \
     "gripper.ip=${GRIPPER_IP}" \
     "gripper.port=${GRIPPER_PORT}"
+)
+
+if [[ -n "${REST_POSE}" ]]; then
+    sim_args+=("robot_model.rest_pose=${REST_POSE}")
+fi
+
+exec python bullet_manipulator.py "${sim_args[@]}"
