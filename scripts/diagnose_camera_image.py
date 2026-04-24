@@ -1,4 +1,5 @@
 import argparse
+import os
 import subprocess
 from pathlib import Path
 
@@ -9,7 +10,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Capture and diagnose a V4L2/OpenCV camera image.")
-    parser.add_argument("--device", default="/dev/video6")
+    parser.add_argument("--device", default=os.environ.get("DROID_ARDUCAM_LEFT_DEVICE", "/dev/video0"))
     parser.add_argument("--output_dir", default="/workspace/reports/arducam_diagnostics")
     parser.add_argument("--frames", type=int, default=12)
     parser.add_argument("--width", type=int, default=0)

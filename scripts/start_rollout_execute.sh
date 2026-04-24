@@ -6,6 +6,8 @@ if [[ "${DROID_ENABLE_ROBOT_MOTION:-0}" != "1" || "${CONFIRM_REAL_ROBOT:-0}" != 
     exit 1
 fi
 
+export DROID_OBSERVATION_WARMUP_STEPS="${DROID_OBSERVATION_WARMUP_STEPS:-30}"
+
 eval "$(micromamba shell hook --shell bash)"
 set +u
 micromamba activate "${DROID_ROBOT_RUNTIME_ENV:-polymetis-local}"

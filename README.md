@@ -72,6 +72,11 @@ lsusb
 rs-enumerate-devices
 ```
 
+Prefer stable `/dev/v4l/by-id/...` camera paths in `.env` and `config/cameras.env`.
+Do not point `DROID_ARDUCAM_LEFT_DEVICE` at a RealSense `/dev/videoN` node; if the
+Arducam reader opens the RealSense node first, the D435 startup will fail with
+`VIDIOC_S_FMT ... Device or resource busy`.
+
 ## Runbook: preview before live robot
 
 Use this order before every real robot run. Replace the prompt as needed.
@@ -177,21 +182,65 @@ docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
 ### 5. Execute on the real robot
 
 Only after the visual report, sim preview, and read-only dry run look acceptable, enable real motion in
-`.env`:
-
-```env
-DROID_ENABLE_ROBOT_MOTION=1
-CONFIRM_REAL_ROBOT=1
-```
-
-Then run:
+the command environment. Start with a short 8-step live run and keep `--no_reset` for the first test so
+the robot does not move to DROID's reset joints before the VLA command:
 
 ```bash
-docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
+LIVE_LOG_DIR=/workspace/reports/live_grab_red_cube_first_8
+
+docker compose -f docker-compose.singlepc.yml run --rm \
+  -e DROID_ENABLE_ROBOT_MOTION=1 \
+  -e CONFIRM_REAL_ROBOT=1 \
+  -e DROID_ROLLOUT_LOG_DIR="$LIVE_LOG_DIR" \
+  -e DROID_ROLLOUT_LOG_CSV="$LIVE_LOG_DIR/rollout.csv" \
+  openpi-droid \
+  /workspace/runtime_scripts/start_rollout_execute.sh \
+    --no_reset \
+    --prompt "grab the red cube on the table" \
+    --max_timesteps 8 \
+    --open_loop_horizon 8
+```
+
+If that looks sane, increase gradually:
+
+```bash
+LIVE_LOG_DIR=/workspace/reports/live_grab_red_cube_first_30
+
+docker compose -f docker-compose.singlepc.yml run --rm \
+  -e DROID_ENABLE_ROBOT_MOTION=1 \
+  -e CONFIRM_REAL_ROBOT=1 \
+  -e DROID_ROLLOUT_LOG_DIR="$LIVE_LOG_DIR" \
+  -e DROID_ROLLOUT_LOG_CSV="$LIVE_LOG_DIR/rollout.csv" \
+  openpi-droid \
   /workspace/runtime_scripts/start_rollout_execute.sh \
     --prompt "grab the red cube on the table" \
-    --max_timesteps 600
+    --no_reset \
+    --max_timesteps 30 \
+    --open_loop_horizon 8
 ```
+
+For longer diagnostics after an unstable run, keep the gripper fixed and reduce arm action magnitude:
+
+```bash
+LIVE_LOG_DIR=/workspace/reports/live_grab_red_cube_guarded_60
+
+docker compose -f docker-compose.singlepc.yml run --rm \
+  -e DROID_ENABLE_ROBOT_MOTION=1 \
+  -e CONFIRM_REAL_ROBOT=1 \
+  -e DROID_ROLLOUT_LOG_DIR="$LIVE_LOG_DIR" \
+  -e DROID_ROLLOUT_LOG_CSV="$LIVE_LOG_DIR/rollout.csv" \
+  openpi-droid \
+  /workspace/runtime_scripts/start_rollout_execute.sh \
+    --no_reset \
+    --prompt "grab the red cube on the table" \
+    --max_timesteps 60 \
+    --open_loop_horizon 8 \
+    --arm_action_scale 0.5 \
+    --freeze_gripper
+```
+
+If you want to allow the gripper but stop before any close command is executed, replace
+`--freeze_gripper` with `--stop_on_gripper_close`.
 
 ## Smoke checks
 
@@ -237,7 +286,8 @@ Arducam image diagnostics:
 ```bash
 docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
   micromamba run -n droid python /workspace/runtime_scripts/diagnose_camera_image.py \
-  --device /dev/video6 --output_dir /workspace/reports/arducam_diagnostics
+  --device /dev/v4l/by-id/usb-Arducam_Arducam_B0495__USB3_2.3MP__Arducam_20231205_0001-video-index0 \
+  --output_dir /workspace/reports/arducam_diagnostics
 ```
 
 Open `reports/arducam_diagnostics/report.html` to compare OpenCV conversion, raw YUYV conversion,
