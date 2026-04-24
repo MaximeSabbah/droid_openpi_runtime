@@ -142,6 +142,21 @@ docker compose -f docker-compose.singlepc.yml run --rm -e DROID_CAMERA_BACKEND=m
   micromamba run -n droid python /workspace/runtime_scripts/smoke_cameras.py
 ```
 
+No-motion VLA action path through DROID FrankaRobot:
+
+```bash
+docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
+  micromamba run -n polymetis-local python /workspace/runtime_scripts/smoke_vla_action_path.py --mock_policy
+```
+
+With a running OpenPI policy server, the same check can use real policy outputs while still using fake
+Polymetis robot/gripper interfaces:
+
+```bash
+docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
+  micromamba run -n polymetis-local python /workspace/runtime_scripts/smoke_vla_action_path.py
+```
+
 Gripper command dry-run:
 
 ```bash
