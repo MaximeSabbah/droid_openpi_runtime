@@ -89,6 +89,7 @@ def main():
 
             camera_panel = output_dir / "camera_panel_{0:03d}.png".format(step_idx)
             save_preview_image(camera_panel, [curr_obs["left_image"], curr_obs["wrist_image"], curr_obs["right_image"]])
+            save_source_images(output_dir, step_idx, curr_obs)
 
             request_data = None
             if (
@@ -141,6 +142,17 @@ def save_policy_images(output_dir, step_idx, request_data):
         ("observation/wrist_image_left", "policy_wrist_{0:03d}.png"),
     ]:
         Image.fromarray(np.asarray(request_data[key], dtype=np.uint8)).save(output_dir / filename.format(step_idx))
+
+
+def save_source_images(output_dir, step_idx, curr_obs):
+    for key, filename in [
+        ("left_image", "source_left_{0:03d}.png"),
+        ("wrist_image", "source_wrist_{0:03d}.png"),
+        ("right_image", "source_right_{0:03d}.png"),
+    ]:
+        image = curr_obs.get(key)
+        if image is not None:
+            Image.fromarray(np.asarray(image, dtype=np.uint8)).save(output_dir / filename.format(step_idx))
 
 
 def append_action_rows(action_rows, step_idx, raw_action, processed_action):

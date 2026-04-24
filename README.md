@@ -153,6 +153,17 @@ docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
 Open `reports/visual_real_cameras_mock_policy/report.html` on the host to inspect camera panels,
 policy-sized images, action plots, and the action CSV.
 
+Arducam image diagnostics:
+
+```bash
+docker compose -f docker-compose.singlepc.yml run --rm openpi-droid \
+  micromamba run -n droid python /workspace/runtime_scripts/diagnose_camera_image.py \
+  --device /dev/video6 --output_dir /workspace/reports/arducam_diagnostics
+```
+
+Open `reports/arducam_diagnostics/report.html` to compare OpenCV conversion, raw YUYV conversion,
+the policy-sized image, and per-channel statistics.
+
 No-motion VLA action path through DROID FrankaRobot:
 
 ```bash
