@@ -77,6 +77,13 @@ Do not point `DROID_ARDUCAM_LEFT_DEVICE` at a RealSense `/dev/videoN` node; if t
 Arducam reader opens the RealSense node first, the D435 startup will fail with
 `VIDIOC_S_FMT ... Device or resource busy`.
 
+With two external Arducams, the runtime captures `arducam_left` as
+`observation/exterior_image_1_left` and `arducam_right` as
+`observation/exterior_image_2_left`. The active `pi05_droid` policy config ignores
+the second exterior image; `pi0_fast_droid` consumes it as `base_1_rgb`.
+For `pi05_droid` diagnostics, you can also set `--external_camera alternate` to
+alternate which Arducam is sent as `exterior_image_1_left` at policy chunk boundaries.
+
 ## Runbook: preview before live robot
 
 Use this order before every real robot run. Replace the prompt as needed.

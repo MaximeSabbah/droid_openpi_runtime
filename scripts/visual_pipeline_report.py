@@ -44,7 +44,7 @@ def parse_args():
     parser.add_argument("--left_camera_id", default=os.environ.get("DROID_VARIED_CAMERA_1_ID", "arducam_left"))
     parser.add_argument("--right_camera_id", default=os.environ.get("DROID_VARIED_CAMERA_2_ID", ""))
     parser.add_argument("--wrist_camera_id", default=os.environ.get("DROID_HAND_CAMERA_ID", "d435_color"))
-    parser.add_argument("--external_camera", choices=["left", "right"], default="left")
+    parser.add_argument("--external_camera", choices=["left", "right", "alternate"], default="left")
     parser.add_argument("--camera_backend", default=os.environ.get("DROID_CAMERA_BACKEND", "openpi"))
     parser.add_argument("--left_camera_device", default=os.environ.get("DROID_ARDUCAM_LEFT_DEVICE"))
     parser.add_argument("--right_camera_device", default=os.environ.get("DROID_ARDUCAM_RIGHT_DEVICE"))
@@ -76,8 +76,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    if args.external_camera == "right" and not args.right_camera_id:
-        raise ValueError("--external_camera=right requires --right_camera_id")
+    validate_external_camera_args(args)
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -90,6 +89,8 @@ def main():
     report_rows = []
     pred_action_chunk = None
     actions_from_chunk_completed = 0
+    policy_refresh_count = 0
+    selected_external_camera = args.external_camera
 
     try:
         for step_idx in range(args.steps):
@@ -107,11 +108,13 @@ def main():
                 or actions_from_chunk_completed >= pred_action_chunk.shape[0]
             ):
                 actions_from_chunk_completed = 0
-                request_data = make_policy_request(curr_obs, args.external_camera, args.prompt)
+                selected_external_camera = select_external_camera(args, policy_refresh_count)
+                request_data = make_policy_request(curr_obs, selected_external_camera, args.prompt)
                 validate_policy_request(request_data)
                 save_policy_images(output_dir, step_idx, request_data)
                 pred_action_chunk = np.asarray(policy_client.infer(request_data)["actions"])
                 validate_action_chunk(pred_action_chunk)
+                policy_refresh_count += 1
 
             raw_action = pred_action_chunk[actions_from_chunk_completed]
             processed_action = process_action(raw_action)
@@ -128,6 +131,7 @@ def main():
                     "processed_min": float(np.min(processed_action)),
                     "processed_max": float(np.max(processed_action)),
                     "policy_refreshed": request_data is not None,
+                    "selected_external_camera": selected_external_camera,
                 }
             )
 
@@ -153,6 +157,17 @@ def configure_no_motion_robot_state(args):
     os.environ.setdefault("DROID_MOCK_GRIPPER_POSITION", "0.0")
 
 
+def validate_external_camera_args(args):
+    if args.external_camera in ("right", "alternate") and not args.right_camera_id:
+        raise ValueError("--external_camera={0} requires --right_camera_id".format(args.external_camera))
+
+
+def select_external_camera(args, policy_refresh_count):
+    if args.external_camera == "alternate":
+        return "left" if policy_refresh_count % 2 == 0 else "right"
+    return args.external_camera
+
+
 def warmup_observation_source(observation_source, warmup_steps):
     for _ in range(max(0, warmup_steps)):
         observation_source.get_observation()
@@ -161,8 +176,11 @@ def warmup_observation_source(observation_source, warmup_steps):
 def save_policy_images(output_dir, step_idx, request_data):
     for key, filename in [
         ("observation/exterior_image_1_left", "policy_external_{0:03d}.png"),
+        ("observation/exterior_image_2_left", "policy_external_2_{0:03d}.png"),
         ("observation/wrist_image_left", "policy_wrist_{0:03d}.png"),
     ]:
+        if key not in request_data:
+            continue
         Image.fromarray(np.asarray(request_data[key], dtype=np.uint8)).save(output_dir / filename.format(step_idx))
 
 
@@ -257,7 +275,7 @@ def write_html_report(path, args, report_rows, actions_csv, raw_plot, processed_
     rows_html = "\n".join(
         "<tr><td>{step}</td><td>{chunk_shape}</td><td>{raw_min:.3f}</td><td>{raw_max:.3f}</td>"
         "<td>{processed_min:.3f}</td><td>{processed_max:.3f}</td><td>{policy_refreshed}</td>"
-        "<td><img src='{camera_panel}'></td></tr>".format(**row)
+        "<td>{selected_external_camera}</td><td><img src='{camera_panel}'></td></tr>".format(**row)
         for row in report_rows
     )
     body = """<!doctype html>
@@ -287,7 +305,8 @@ def write_html_report(path, args, report_rows, actions_csv, raw_plot, processed_
   <table>
     <tr>
       <th>Step</th><th>Chunk</th><th>Raw min</th><th>Raw max</th>
-      <th>Processed min</th><th>Processed max</th><th>Policy refreshed</th><th>Camera panel</th>
+      <th>Processed min</th><th>Processed max</th><th>Policy refreshed</th>
+      <th>Selected external</th><th>Camera panel</th>
     </tr>
     {rows}
   </table>
